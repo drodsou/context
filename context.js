@@ -1,143 +1,167 @@
 
-let ctx = {}
+function createContext () {
 
-let priv = {
-  DEFAULT_LOCALSTORAGE_KEY : 'default-drodsou-context-localStorageKey',
-  addUndoState : function({actionName, actionArgs}) {
-    ctx.previousStates.push({
-      state: JSON.stringify(ctx.state), 
-      exitActionName:actionName, 
-      exitActionArgs:actionArgs,
-      timestamp : Date.now()
-    });
-    if (ctx.previousStates.length > ctx.options.undoSlots) {
-      ctx.previousStates.shift();
+  let ctx = {
+    state : {}
+    action : {},
+    prop : {}
+    beforeAction : {},
+    afterAction : {},
+    afterStateChange : {},
+    logger : undefined,   // ({phase, actionName, actionArgs, result timestamp })=>{whatever}
+    options : {
+      undoSlots : 0,
+      localStorageKey : null,
+      lsAutoSave : false,
+      lsAutoLoad : false,
+    },
+    // -- should not be 
+    util : {}
+    previousStates = [],  // {state, exitActionName, exitActionArgs }
+  }
+
+  let priv = {
+    DEFAULT_LOCALSTORAGE_KEY : 'default-drodsou-context-localStorageKey',
+    addUndoState : function({actionName, actionArgs}) {
+      ctx.previousStates.push({
+        state: JSON.stringify(ctx.state), 
+        exitActionName:actionName, 
+        exitActionArgs:actionArgs,
+        timestamp : Date.now()
+      });
+      if (ctx.previousStates.length > ctx.options.undoSlots) {
+        ctx.previousStates.shift();
+      }
     }
   }
-}
 
-ctx.options = {}, // see ctx.init for defaults
-ctx.options.localStorageKey = undefined;
-ctx.previousStates = [];  // {state, exitActionName, exitActionArgs }
 
-ctx.undo = function () {
-  if (!ctx.options.undoSlots) {
-    // throw new Error(`global-state: cant't undo, it has been disabled in ctx.init() options`)
-    console.warn(`@drodsou/context: asking for undo, but undo is disabled. Set undoSlots > 0 in .options or in 'init' to enable it.`);
-  }
+  // --- PREDEFINED ACTIONS
 
-  if (ctx.previousStates.length > 0) {
+  ctx.action.undo = function () {
+    if (!ctx.options.undoSlots) {
+      // throw new Error(`global-state: cant't undo, it has been disabled in ctx.init() options`)
+      console.warn(`@drodsou/context: asking for undo, but undo is disabled. Set undoSlots > 0 in .options or in 'init' to enable it.`);
+    }
+
+    if (ctx.previousStates.length <= 0) { 
+      return false;   // no state change
+    }
+
     let prevState = ctx.previousStates.pop();
     console.log(`Undoing action ${prevState.exitActionName}(${prevState.exitActionArgs.join(',')})`)
     ctx.state = JSON.parse(prevState.state);
-    ctx.updateUI();
+    
   }
-}
 
-ctx.loadFromLocalStorage = function (alternateLocalStorageKey, updateUI=true) {
-  ctx.previousStates = [];
-  if (typeof localStorage !== 'undefined') {
+
+  ctx.action.loadFromLocalStorage = function (alternateLocalStorageKey, updateUI=true) {
+    if (typeof localStorage === 'undefined') { return false }
+
     let lsKey = alternateLocalStorageKey || ctx.options.localStorageKey || priv.DEFAULT_LOCALSTORAGE_KEY;
     if (lsKey === priv.DEFAULT_LOCALSTORAGE_KEY) {
       console.warn(`@drodsou/context: loading from local storage but 'localStorageKey' was not provided in 'init', using default key`)
     }
     let lsState = localStorage.getItem(`${lsKey}_state`)
     if (lsState) {
+      ctx.previousStates = [];
       ctx.state = {...ctx.state, ...JSON.parse(lsState) };
-      if (updateUI) { ctx.updateUI(); }
     }      
-  }
-}
-
-ctx.saveToLocalStorage = function (alternateLocalStorageKey) {
-  if (typeof localStorage !== 'undefined') {
-    let lsKey = alternateLocalStorageKey || ctx.options.localStorageKey || priv.DEFAULT_LOCALSTORAGE_KEY;
-    if (lsKey === priv.DEFAULT_LOCALSTORAGE_KEY) {
-      console.warn(`@drodsou/context: saving to local storage but 'localStorageKey' was not provided in 'init', using default key`)
-    }
-    localStorage.setItem(`${lsKey}_state`, JSON.stringify(ctx.state));
-  }
-}
-
-/**
- * @param r - react 'this' if in a class componente or [state,setState] from useState()
- */
-ctx.connectReact = function (r) {
-  if (r.forceUpdate) {
-    ctx.updateUI = r.forceUpdate.bind(r);
-  } else {
-    let [state,setState] = r;
-    ctx.updateUI = ()=>setState( st=>(
-      st > 10000 ? 0 : (st || 0) +1
-    ));
-  }
-}
-
-// should be updated on ctx.connectXXX functions;
-ctx.updateUI = function() {
-  console.warn(`@drodsou/context: updateUI() is not triggering any UI repaint. Use builtin functions .connectToXXX depending on your framework, or set your own updateUI.`);
-};  
-
-ctx.actions = undefined;
-/**
- * 
- */
-ctx.init = function ({state, actions, props, options, ...other}) {
-  if (Object.keys(other).length > 0) {
-    throw new Error (`@drodsou/context: unexpected parameter(s) detected in 'init': ${Object.keys(other).join(', ')}`);
+    
   }
 
-  let {undoSlots,localStorageKey,lsAutoSave,lsAutoLoad,
-    beforeAction,afterAction, ...otherOptions
-  } = options;
-  if (Object.keys(otherOptions).length > 0) {
-    throw new Error (`@drodsou/context: unexpected parameter(s) detected in 'init' options: ${Object.keys(otherOptions).join(', ')}`);
-  }
-
-  ctx.options.undoSlots = undoSlots || 0;
-  ctx.options.localStorageKey = localStorageKey;
-  ctx.options.lsAutoSave = lsAutoSave || false;
-  ctx.options.lsAutoLoad = lsAutoLoad || false;
-  ctx.options.beforeAction = beforeAction || [];
-  ctx.options.afterAction = afterAction || [];
-
-
-  ctx.state = state || {};  // never write here directly in the application, only in the actions's. Intentionally not RO for performance matters, see proxy coment at the end
-  ctx.props = props || {};  // place for arbitrary data out of state
-
-  ctx.actions = new Proxy( actions || {}, {
-      get (actionsObj, actionName) {
-        const actionFn = actionsObj[actionName];
-        return function (...actionArgs) {
-          // let actionArgsArr = Array.from(actionArgs);
-          // before action
-          // ...custom hooks
-          ctx.options.beforeAction.forEach(f=>f({actionName, actionArgs}));
-          // ...save undo state?
-          if (ctx.options.undoSlots > 0) { 
-            priv.addUndoState({actionName, actionArgs}); 
-          }
-
-          // DO ACTION
-          result = actionFn.apply(this, actionArgs);
-          
-          // after action
-          // ...custom hooks
-          ctx.options.afterAction.forEach(f=>f({actionName, actionArgs}));
-          // ...save?
-          if (ctx.options.lsAutoSave) { ctx.saveToLocalStorage(); }
-          ctx.updateUI();
-
-          return result;
-        }
+  ctx.action.saveToLocalStorage = function (alternateLocalStorageKey) {
+    if (typeof localStorage !== 'undefined') {
+      let lsKey = alternateLocalStorageKey || ctx.options.localStorageKey || priv.DEFAULT_LOCALSTORAGE_KEY;
+      if (lsKey === priv.DEFAULT_LOCALSTORAGE_KEY) {
+        console.warn(`@drodsou/context: saving to local storage but 'localStorageKey' was not provided in 'init', using default key`)
       }
-  });
+      localStorage.setItem(`${lsKey}_state`, JSON.stringify(ctx.state));
+    }
+    return false; // no state change
+  }
 
-  if (ctx.options.lsAutoLoad) { ctx.loadFromLocalStorage(null, false) }
+
+  /**
+   * Utility helper action when using react
+   * @param r - react 'this' if in a class componente or [state,setState] from useState()
+   */
+  ctx.action.connectReact = function (r) {
+    if (r.forceUpdate) {
+      ctx.updateUI = r.forceUpdate.bind(r);
+    } else {
+      let [state,setState] = r;
+      ctx.afterStateChange.updateUI = ()=> {
+        setState( st=> st > 10000 ? 0 : (st || 0) +1 )
+      };
+    }
+  }
+
+  
+  // --- PREDEFINED TRIGGERS
+
+  ctx.afterStateChange.maybeAddUndoState = ({actionName, actionArgs})=>{
+    // ...save undo state?
+    if (ctx.options.undoSlots > 0) { 
+      priv.addUndoState({actionName, actionArgs}); 
+    }
+  }
+
+  ctx.afterStateChange.maybeSaveToLocalStorage = ({actionName, actionArgs})=>{
+    // ...save undo state?
+    if (ctx.options.lsAutoSave) { ctx.saveToLocalStorage(); }
+  }
+
+
+  // -- INIT FUNCTION
+
+  /**
+   * 
+   */
+  ctx.init = function () {
+
+    ctx.action = new Proxy( ctx.action || {}, {
+        get (actionsObj, actionName) {
+          const actionFn = actionsObj[actionName];
+          return function (...actionArgs) {
+            
+            // before action
+            for (let [fnName, fn] of Object.entries(ctx.beforeAction)) {
+              let continueAction = fn({actionName, actionArgs});
+              if (ctx.logger) { ctx.logger({phase:`beforeAction:${fnName}`, result:`cancelAction ${cancelAction}`, actionName, actionArgs, timestamp: Date.now() })
+              if (cancelAction === false) return;
+            }
+
+            // do action
+            let stateChanged = actionFn.apply(this, actionArgs);
+            if (ctx.logger) { ctx.logger({phase:'action', result:`stateChanged ${stateChanged}`, actionName, actionArgs, timestamp: Date.now() })
+            
+            
+            // after action
+            for (let [fnName, fn] of Object.entries(ctx.afterAction)) {
+              if (ctx.logger) { ctx.logger({phase:`afterAction:${fnName}`, result:null, actionName, actionArgs, timestamp: Date.now() })
+              fn({actionName, actionArgs});
+            }
+
+            // after state change
+            if (stateChanged) {
+              for (let [fnName, fn] of Object.entries(ctx.afterStateChange)) {
+                if (ctx.logger) { ctx.logger({phase:`afterAction:${fnName}`, result:null, actionName, actionArgs, timestamp: Date.now() })
+                fn({actionName, actionArgs});
+              }
+            }
+
+          }
+        }
+    });
+
+    if (ctx.options.lsAutoLoad) { ctx.action.loadFromLocalStorage(null, false) }
+
+  } // init
 
 }
 
-module.exports = ctx;
+module.exports = createContext;
 
 
 
