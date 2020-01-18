@@ -1,6 +1,6 @@
 {
   "name": "@drodsou/context",
-  "version": "0.1.0-a",
+  "version": "0.2.0",
   "description": "Vanilla javascript alternative to Redux / React Context API",
   "main": "context.js",
   "repository": {
@@ -8,7 +8,7 @@
     "url": "https://github.com/drodsou/context.git"
   },
   "scripts": {
-    "test": "node index.test.js",
+    "test": "node context.test.js",
     "testreact": "next dev testreact",
     "npmsimulate": "npm pack && echo \"• Remember to delete the tar.gz and bump version\" ",
     "npmrelease": "npm test && git add -A && git status && git commit -m \"npm publish\" && git tag -a %npm_package_version% -m \"npm published\" && git push --tags",
