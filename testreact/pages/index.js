@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 
 import gc from '../my-app-context';
 
@@ -7,7 +7,7 @@ import Comp1b from '../components/Comp1';
 import Comp2 from '../components/Comp2';
 
 export default function Index ({children, ...other}) {
-  gc.connectReact(useState());
+  gc.util.connectReact(useState());
 
   /*DEBUG*/;(typeof window === 'undefined' ? global : window).gc = gc;
 

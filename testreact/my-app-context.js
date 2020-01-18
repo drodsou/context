@@ -1,15 +1,19 @@
 import createContext from '../context';
 
+let ctx = createContext();
 
-let state = { // you should not change this directly outside actions... but you can
+ctx.state = { // you should not change this directly outside actions... but you can
   count:5
 };
 
-let action = {
+// cant do ctx.actions = {...} but can do this
+// also of course you can also do ctx.actions.inc = ...
+Object.assign(ctx.actions, {
   inc : (value)=> { ctx.state.count += (value || 1); }
-}
+})
 
-let prop = {
+
+ctx.props = {
   doubleCount : ()=>ctx.state.count*2,
   stateValidation : {
     countInRange : ()=>ctx.state.count <= 10,
@@ -17,23 +21,15 @@ let prop = {
 }
 
 // TODO are you sure not to ctx.beforeAction.xx format?
-let beforeAction
-{logBefore = (actionName,actionArgs)=>{ console.log(`action ${actionName}(${actionArgs.join(',')}) done`}
-ctx.afterAction.logAfter = (actionName,actionArgs)=>{ console.log(`action ${actionName}(${actionArgs.join(',')}) done`}
+// ctx.beforeAction.logBefore = ({actionName,actionArgs})=>{ console.log(`- before action ${actionName}(${actionArgs.join(',')}) done`) }
+// ctx.afterAction.logAfter = ({actionName,actionArgs})=>{ console.log(`- after action ${actionName}(${actionArgs.join(',')}) done`) }
+// ctx.afterStateChange.logAfterState = ({actionName,actionArgs})=>{ console.log(`- after state change, action ${actionName}(${actionArgs.join(',')}) done`) }
+ctx.beforeAction.dummyBeforeAction = ()=>{};
+ctx.afterAction.dummyAfterAction = ()=>{};
+ctx.afterStateChange.dummyAfterStateChange = ()=>{};
+ctx.logger = true;
 
-ctx.options = {
-  undoSlots: 5,    // 0 to disable undo, better for performance
-  localStorageKey: undefined,
-  lsAutoLoad: undefined,
-  lsAutoSave: undefined,
-}
+ctx.undoSlots = 5;
 
-ctx.init(); // Important!
-
-// TODO: move to this fomat, so it also does init
-let ctx = createContext(
-  state, action:action, beforeAction, afterAction, options, prop .... //TODO then this
-
-);
 
 export default ctx;

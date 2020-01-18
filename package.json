@@ -1,6 +1,6 @@
 {
   "name": "@drodsou/context",
-  "version": "0.1.0",
+  "version": "0.1.0-a",
   "description": "Vanilla javascript alternative to Redux / React Context API",
   "main": "context.js",
   "repository": {
