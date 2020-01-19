@@ -30,32 +30,43 @@ function createContext () {
       }
       return function (...actionArgs) {
         actionArgs = Array.from(actionArgs);
+        // remove event object passed when used in onClick={app.actions.someaction}
+        if (actionArgs.length === 1 && actionArgs[0].nativeEvent) { actionArgs = [];  }
         
         // before action
         for (let [fnName, fn] of Object.entries(ctx.beforeAction)) {
           let continueAction = fn({actionName, actionArgs});
           priv.logger({actionName, actionArgs, phase:`1-done beforeAction.${fnName}`, result:`continueAction ${continueAction}`, timestamp: Date.now() });
-          if (continueAction === false) return;
+          if (continueAction === false) { 
+            // here could be another hook of ctx.beforeActionCancelled
+            return;
+          }
         }
 
         // do action
+        if (actionName !== 'undo' && ctx.undoSlots > 0) { priv.addUndoState({actionName, actionArgs}); }
         let stateChanged = actionFn.apply(this, actionArgs);
         priv.logger({actionName, actionArgs, phase:`2-done action`, result:`stateChanged ${stateChanged}`, timestamp: Date.now() }); 
-                
-        // after action
-        for (let [fnName, fn] of Object.entries(ctx.afterAction)) {
-          fn({actionName, actionArgs});
-          priv.logger({actionName, actionArgs, phase:`3-done afterAction.${fnName}`, result:null, timestamp: Date.now() }); 
-        }
 
         // after state change
         // by default all actions are suposed to change state, unless they return `false` boolean value
-        if (stateChanged !== false) {
-          for (let [fnName, fn] of Object.entries(ctx.afterStateChange)) {
+        if (stateChanged === false) { 
+          if (actionName !== 'undo' && ctx.undoSlots > 0) { priv.cancelUndoState(); }
+          // here could be another hook of ctx.afterStateNotChanged
+        } else {
+            for (let [fnName, fn] of Object.entries(ctx.afterStateChange)) {
             fn({actionName, actionArgs});
-            priv.logger({actionName, actionArgs, phase:`4-done afterStateChange.${fnName}`, result:null, timestamp: Date.now() });
+            priv.logger({actionName, actionArgs, phase:`3-done afterStateChange.${fnName}`, result:null, timestamp: Date.now() });
           }
         }
+
+        // after action
+        for (let [fnName, fn] of Object.entries(ctx.afterAction)) {
+          fn({actionName, actionArgs});
+          priv.logger({actionName, actionArgs, phase:`4-done afterAction.${fnName}`, result:null, timestamp: Date.now() }); 
+        }
+
+
       }
     }
   });
@@ -81,6 +92,9 @@ function createContext () {
       if (ctx.previousStates.length > ctx.undoSlots) {
         ctx.previousStates.shift();
       }
+    },
+    cancelUndoState : function() {
+      ctx.previousStates.pop();
     },
     loggerLastPhase : '4', 
     logger : (props) => {
@@ -161,16 +175,6 @@ function createContext () {
       }
     }
     return false;
-  }
-
-  
-  // --- PREDEFINED TRIGGERS
-
-  ctx.afterStateChange.maybeAddUndoState = ({actionName, actionArgs})=>{
-    // ...save undo state?
-    if (ctx.undoSlots > 0) { 
-      priv.addUndoState({actionName, actionArgs}); 
-    }
   }
 
   return ctx;
