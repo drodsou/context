@@ -9,7 +9,7 @@ function createContext () {
     undoSlots : 0,
     beforeAction : {},
     afterAction : {},
-    afterStateChange : {},
+    afterRenderNeeded : {},
     logger : undefined,   // ({phase, actionName, actionArgs, result timestamp })=>{whatever}
     // -- should not be updated by user normally
     previousStates : [],  // {state, exitActionName, exitActionArgs }
@@ -44,19 +44,22 @@ function createContext () {
         }
 
         // do action
-        if (actionName !== 'undo' && ctx.undoSlots > 0) { priv.addUndoState({actionName, actionArgs}); }
-        let stateChanged = actionFn.apply(this, actionArgs);
-        priv.logger({actionName, actionArgs, phase:`2-done action`, result:`stateChanged ${stateChanged}`, timestamp: Date.now() }); 
+        if (ctx.undoSlots > 0 && actionName !== 'undo') { 
+          priv.addUndoState({actionName, actionArgs}); 
+        }
+        let actionRet = { undo:true, render:true, ...actionFn.apply(this, actionArgs) };
+        priv.logger({actionName, actionArgs, phase:`2-done action`, result:`undo ${actionRet.undo}`, timestamp: Date.now() }); 
 
         // after state change
         // by default all actions are suposed to change state, unless they return `false` boolean value
-        if (stateChanged === false) { 
-          if (actionName !== 'undo' && ctx.undoSlots > 0) { priv.cancelUndoState(); }
+        if (ctx.undoSlots > 0 && actionName !== 'undo' && actionRet.undo === false) { 
+          priv.cancelUndoState(); 
+        }
           // here could be another hook of ctx.afterStateNotChanged
-        } else {
-            for (let [fnName, fn] of Object.entries(ctx.afterStateChange)) {
+        if (actionRet.render) {
+          for (let [fnName, fn] of Object.entries(ctx.afterRenderNeeded)) {
             fn({actionName, actionArgs});
-            priv.logger({actionName, actionArgs, phase:`3-done afterStateChange.${fnName}`, result:null, timestamp: Date.now() });
+            priv.logger({actionName, actionArgs, phase:`3-done afterRenderNeeded.${fnName}`, result:null, timestamp: Date.now() });
           }
         }
 
@@ -132,13 +135,13 @@ function createContext () {
     }
 
     if (ctx.previousStates.length <= 0) { 
-      return false;   // no state change
+      return {undo:false, render:false};
     }
 
     let prevState = ctx.previousStates.pop();
     console.log(`Undoing action ${prevState.exitActionName}(${prevState.exitActionArgs.join(',')})`)
     ctx.state = JSON.parse(prevState.state);
-    
+    return {undo:false, render:true}
   }
 
   ctx.actions.lsLoadState = function (lsKey) {
@@ -151,7 +154,7 @@ function createContext () {
 
   ctx.actions.lsSaveState = function (lsKey) {
     localStorage.setItem(`${lsKey}_state`, JSON.stringify(ctx.state));
-    return false; // no state change
+    return {undo:false, render:false}; // no state change
   }
 
   // --- UTILITIES
@@ -163,18 +166,17 @@ function createContext () {
   ctx.util.connectReact = function (r) {
     if (r.forceUpdate) {
       // class this
-      ctx.afterStateChange.updateUI = ()=>r.forceUpdate();
+      ctx.afterRenderNeeded.updateUI = ()=>r.forceUpdate();
     } else {
       // function useState()
       let [state,setState] = r;
       if (state === undefined) {
         // only first time
-        ctx.afterStateChange.updateUI = ()=> {
+        ctx.afterRenderNeeded.updateUI = ()=> {
           setState( st=> st > 10000 ? 0 : (st || 0) +1 )
         };
       }
     }
-    return false;
   }
 
   return ctx;

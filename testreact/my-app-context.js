@@ -23,10 +23,10 @@ ctx.props = {
 // TODO are you sure not to ctx.beforeAction.xx format?
 // ctx.beforeAction.logBefore = ({actionName,actionArgs})=>{ console.log(`- before action ${actionName}(${actionArgs.join(',')}) done`) }
 // ctx.afterAction.logAfter = ({actionName,actionArgs})=>{ console.log(`- after action ${actionName}(${actionArgs.join(',')}) done`) }
-// ctx.afterStateChange.logAfterState = ({actionName,actionArgs})=>{ console.log(`- after state change, action ${actionName}(${actionArgs.join(',')}) done`) }
+// ctx.afterRenderNeeded.logAfterState = ({actionName,actionArgs})=>{ console.log(`- after state change, action ${actionName}(${actionArgs.join(',')}) done`) }
 ctx.beforeAction.dummyBeforeAction = ()=>{};
 ctx.afterAction.dummyAfterAction = ()=>{};
-ctx.afterStateChange.dummyAfterStateChange = ()=>{};
+ctx.afterRenderNeeded.dummyafterRenderNeeded = ()=>{};
 ctx.logger = true;
 
 ctx.undoSlots = 5;
